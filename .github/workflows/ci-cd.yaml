@@ -61,3 +61,53 @@ jobs:
             docker.io/${{ vars.DOCKERHUB_USERNAME }}/todo-app:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+        
+
+  deploy:
+    name: Deploy to Kubernetes
+    needs: docker                       # only after the image is pushed
+    # Deploy only for pushes/manual runs on the default branch, never for pull requests
+    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: self-hosted                # the runner in your WSL
+    env:
+      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      TAG: ${{ needs.docker.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Connect to cluster
+        run: |
+          echo "KUBECONFIG=$HOME/.kube/config" >> "$GITHUB_ENV"
+          export KUBECONFIG="$HOME/.kube/config"
+          kubectl get nodes
+
+      - name: Create or update database secret
+        run: |
+          if [ -z "$MYSQL_ROOT_PASSWORD" ] || [ -z "$MYSQL_PASSWORD" ]; then
+            echo "::error::Set MYSQL_ROOT_PASSWORD and MYSQL_PASSWORD in repo secrets"; exit 1
+          fi
+          kubectl apply -f k8s/namespace.yaml
+          kubectl -n todo create secret generic mysql-secret \
+            --from-literal=MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD" \
+            --from-literal=MYSQL_PASSWORD="$MYSQL_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy image ${{ needs.docker.outputs.tag }}
+        run: |
+          sed -i "s|newTag: .*|newTag: $TAG|" k8s/kustomization.yaml
+          kubectl apply -k k8s/
+          kubectl -n todo rollout status statefulset/mysql --timeout=300s
+          kubectl -n todo rollout status deployment/todo-app --timeout=300s
+
+      - name: Show app URL
+        run: |
+          kubectl -n todo get pods,svc
+          IP=$(kubectl -n todo get svc todo-app -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          PORT=$(kubectl -n todo get svc todo-app -o jsonpath='{.spec.ports[0].port}')
+          echo "App is live at: http://$IP:$PORT"
+          echo "### 🚀 Deployed \`$TAG\` → http://$IP:$PORT" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Show logs on failure
+        if: failure()
+        run: kubectl -n todo logs deployment/todo-app --all-containers --tail=100 || true
