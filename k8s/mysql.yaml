@@ -1,0 +1,70 @@
+# MySQL database with a persistent volume.
+# Passwords come from the "mysql-secret" Secret.
+# NOTE: MYSQL_* variables only take effect the first time the volume is initialised.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels: { app: mysql }
+spec:
+  clusterIP: None          # headless service for the StatefulSet
+  selector: { app: mysql }
+  ports:
+    - name: mysql
+      port: 3306
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  labels: { app: mysql }
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels: { app: mysql }
+  template:
+    metadata:
+      labels: { app: mysql }
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.4
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MYSQL_DATABASE
+              value: tododb
+            - name: MYSQL_USER
+              value: todo
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mysql-secret, key: MYSQL_PASSWORD }
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mysql-secret, key: MYSQL_ROOT_PASSWORD }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$MYSQL_ROOT_PASSWORD\""]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$MYSQL_ROOT_PASSWORD\""]
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 512Mi }
+            limits:   { memory: 1Gi }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi

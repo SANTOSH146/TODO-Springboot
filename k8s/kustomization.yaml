@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: todo
+
+resources:
+  - namespace.yaml
+  - mysql.yaml
+  - app.yaml
+
+# The pipeline will rewrite newTag on every deploy (e.g. sha-1a2b3c4).
+images:
+  - name: todo-app
+    newName: docker.io/santoshcrh/todo-app
+    newTag: latest
