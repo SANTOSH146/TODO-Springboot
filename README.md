@@ -84,6 +84,7 @@ curl -X DELETE localhost:8080/api/todos/1
 ## Project layout
 
 ```
+k8s/
 src/main/java/com/example/todo/
 ├── TodoApplication.java
 ├── controller/TodoController.java      REST endpoints
