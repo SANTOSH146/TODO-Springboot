@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Todo</title>
+<style>
+  :root { --bg:#f5f5f2; --card:#fff; --ink:#1d1d1b; --muted:#76766f; --line:#e3e3dd; --accent:#2f6f4f; --high:#b4442e; --med:#b07d1a; --low:#5a7d9a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:680px; margin:48px auto; padding:0 16px; }
+  h1 { font-size:28px; margin:0 0 4px; letter-spacing:-.02em; }
+  .sub { color:var(--muted); margin:0 0 24px; }
+  form.add { display:grid; grid-template-columns:1fr auto auto auto; gap:8px; background:var(--card); padding:12px; border:1px solid var(--line); border-radius:10px; }
+  input, select, button { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .toolbar { display:flex; gap:8px; align-items:center; margin:20px 0 10px; flex-wrap:wrap; }
+  .toolbar input { flex:1; min-width:160px; }
+  .filters button.active { background:var(--ink); color:#fff; border-color:var(--ink); }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; gap:12px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:8px; }
+  li.done .title { text-decoration:line-through; color:var(--muted); }
+  li input[type=checkbox] { width:18px; height:18px; accent-color:var(--accent); }
+  .body { flex:1; min-width:0; }
+  .title { font-weight:500; word-break:break-word; }
+  .meta { font-size:12px; color:var(--muted); display:flex; gap:10px; }
+  .pill { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .HIGH { color:var(--high); } .MEDIUM { color:var(--med); } .LOW { color:var(--low); }
+  .overdue { color:var(--high); }
+  .del { border:none; background:none; color:var(--muted); font-size:18px; padding:4px 8px; }
+  .del:hover { color:var(--high); }
+  .footer { display:flex; justify-content:space-between; color:var(--muted); font-size:13px; margin-top:12px; }
+  .footer button { border:none; background:none; color:var(--muted); text-decoration:underline; padding:0; }
+  .empty { text-align:center; color:var(--muted); padding:32px; }
+  .err { color:var(--high); font-size:13px; min-height:20px; margin-top:6px; }
+  @media (max-width:560px){ form.add { grid-template-columns:1fr 1fr; } form.add input[name=title]{ grid-column:1/-1; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Todo</h1>
+  <p class="sub">Spring Boot + H2 · REST API at <code>/api/todos</code></p>
+
+  <form class="add" id="addForm">
+    <input name="title" placeholder="What needs doing?" maxlength="200" required autofocus>
+    <select name="priority" aria-label="Priority">
+      <option value="LOW">Low</option>
+      <option value="MEDIUM" selected>Medium</option>
+      <option value="HIGH">High</option>
+    </select>
+    <input type="date" name="dueDate" aria-label="Due date">
+    <button class="primary" type="submit">Add</button>
+  </form>
+  <div class="err" id="err"></div>
+
+  <div class="toolbar">
+    <input id="search" placeholder="Search…" aria-label="Search">
+    <div class="filters">
+      <button data-f="all" class="active">All</button>
+      <button data-f="false">Active</button>
+      <button data-f="true">Done</button>
+    </div>
+  </div>
+
+  <ul id="list"></ul>
+  <div class="footer">
+    <span id="count"></span>
+    <button id="clear">Clear completed</button>
+  </div>
+</main>
+
+<script>
+const API = '/api/todos';
+let filter = 'all', query = '';
+const $ = s => document.querySelector(s);
+
+async function api(path = '', opts = {}) {
+  const res = await fetch(API + path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.errors ? Object.values(body.errors).join(', ') : (body.detail || res.statusText));
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+async function load() {
+  const p = new URLSearchParams();
+  if (filter !== 'all') p.set('completed', filter);
+  if (query) p.set('q', query);
+  const todos = await api('?' + p);
+  render(todos);
+}
+
+function render(todos) {
+  const list = $('#list');
+  list.innerHTML = '';
+  if (!todos.length) { list.innerHTML = '<li class="empty">Nothing here.</li>'; }
+  const today = new Date().toISOString().slice(0, 10);
+  for (const t of todos) {
+    const li = document.createElement('li');
+    if (t.completed) li.classList.add('done');
+    const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: t.completed });
+    cb.onchange = () => api(`/${t.id}/toggle`, { method: 'PATCH' }).then(load);
+    const body = document.createElement('div'); body.className = 'body';
+    const title = document.createElement('div'); title.className = 'title'; title.textContent = t.title;
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const pill = document.createElement('span'); pill.className = 'pill ' + t.priority; pill.textContent = t.priority;
+    meta.append(pill);
+    if (t.dueDate) {
+      const d = document.createElement('span'); d.textContent = 'Due ' + t.dueDate;
+      if (!t.completed && t.dueDate < today) d.className = 'overdue';
+      meta.append(d);
+    }
+    body.append(title, meta);
+    const del = Object.assign(document.createElement('button'), { className: 'del', textContent: '×', title: 'Delete' });
+    del.onclick = () => api(`/${t.id}`, { method: 'DELETE' }).then(load);
+    li.append(cb, body, del);
+    list.append(li);
+  }
+  const left = todos.filter(t => !t.completed).length;
+  $('#count').textContent = `${left} item${left === 1 ? '' : 's'} left`;
+}
+
+$('#addForm').onsubmit = async e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  $('#err').textContent = '';
+  try {
+    await api('', { method: 'POST', body: JSON.stringify({
+      title: f.get('title'), priority: f.get('priority'), dueDate: f.get('dueDate') || null }) });
+    e.target.reset();
+    e.target.title.focus();
+    load();
+  } catch (ex) { $('#err').textContent = ex.message; }
+};
+
+document.querySelectorAll('.filters button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.filters button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); filter = b.dataset.f; load();
+});
+
+let timer;
+$('#search').oninput = e => { clearTimeout(timer); timer = setTimeout(() => { query = e.target.value.trim(); load(); }, 200); };
+$('#clear').onclick = () => api('/completed', { method: 'DELETE' }).then(load);
+
+load();
+</script>
+</body>
+</html>
