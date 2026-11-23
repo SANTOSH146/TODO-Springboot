@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Todo</title>
+<title>Todo-APP</title>
 <style>
   :root { --bg:#f5f5f2; --card:#fff; --ink:#1d1d1b; --muted:#76766f; --line:#e3e3dd; --accent:#2f6f4f; --high:#b4442e; --med:#b07d1a; --low:#5a7d9a; }
   * { box-sizing: border-box; }
@@ -40,10 +40,10 @@
 <body>
 <main>
   <h1>Todo</h1>
-  <p class="sub">Spring Boot + H2 · REST API at <code>/api/todos</code></p>
+  <p class="sub">Spring Boot + SQL DB · REST API at <code>/api/todos</code></p>
 
   <form class="add" id="addForm">
-    <input name="title" placeholder="What needs doing?" maxlength="200" required autofocus>
+    <input name="title" placeholder="Track your Tasks?" maxlength="200" required autofocus>
     <select name="priority" aria-label="Priority">
       <option value="LOW">Low</option>
       <option value="MEDIUM" selected>Medium</option>
