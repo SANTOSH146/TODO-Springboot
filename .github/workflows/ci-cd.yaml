@@ -44,6 +44,24 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true                      # keep the image on the runner so Trivy can scan it
+          tags: todo-app:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0   # pinned clean release, never @master
+        with:
+          image-ref: todo-app:scan
+          format: table
+          severity: CRITICAL,HIGH         # only fail on serious issues
+          ignore-unfixed: true            # skip CVEs that have no fix available yet
+          exit-code: '1'                  # fail the job if any are found
+
       - name: Log in to Docker Hub
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -51,16 +69,16 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Push image
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}   # PRs build only, no push
+          push: true
           tags: |
             docker.io/${{ vars.DOCKERHUB_USERNAME }}/todo-app:${{ steps.tag.outputs.tag }}
             docker.io/${{ vars.DOCKERHUB_USERNAME }}/todo-app:latest
           cache-from: type=gha
-          cache-to: type=gha,mode=max
         
 
   deploy:
